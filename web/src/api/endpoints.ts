@@ -1,5 +1,5 @@
 import type { ApiClient } from "./client";
-import type { ID, Paginated, ServerState, UDPClient, UDPClientState, SendDatagramRequest, MermaidTraces } from "./types";
+import type { ID, Paginated, ServerState, UDPClient, UDPClientState, SendDatagramRequest, MermaidTraces, ClientMapData } from "./types";
 
 export interface ServerApi {
     start: () => Promise<void>;
@@ -15,6 +15,7 @@ export interface UDPClientApi {
     getAll: () => Promise<{ udpClients: UDPClient[] }>;
     list: (params: { page?: number, pageSize?: number, q?: string }) => Promise<Paginated<UDPClient>>;
     sendDatagram: (request: SendDatagramRequest) => Promise<void>;
+    getClientMap: () => Promise<ClientMapData>;
 }
 
 export interface TraceApi {
@@ -38,6 +39,7 @@ export function createUDPClientApi(client: ApiClient): UDPClientApi {
         getAll: () => client.get("/api/client/get/all"),
         list: (params: { page?: number, pageSize?: number, q?: string }) => client.get("/api/client/get/all/paginated", { query: params }),
         sendDatagram: (request: SendDatagramRequest) => client.post("/api/client/send", { body: request }),
+        getClientMap: () => client.get<ClientMapData>("/api/client/map"),
     };
 }
 

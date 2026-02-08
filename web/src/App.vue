@@ -1,21 +1,24 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, provide } from "vue";
 import { useStringWs } from "@/composables/useStringWs";
 import WsLog from "@/components/WsLog.vue";
 import WsSendInput from "@/components/WsSendInput.vue";
-import ServerState from "./components/states/ServerState.vue";
+import ServerState from "@/components/states/ServerState.vue";
 import { useServerStore } from "@/stores/UDPServer";
-import { useServerButton } from "./composables/useServerButton";
-import ClientsState from "./components/states/ClientsState.vue";
+import { useServerButton } from "@/composables/useServerButton";
+import ClientsState from "@/components/states/ClientsState.vue";
+import ClientMap from "@/components/ClientMap.vue";
 import Overlay from "@/components/Overlay.vue";
 import { useApi } from "@/api/useApi";
+
+type Section = "log" | "server" | "clients" | "map";
+const activeSection = ref<Section>("log");
 
 const udpServerButtonConfig = useServerButton();
 const serverStore = useServerStore();
 serverStore.fetchState();
 
 const api = useApi();
-
 const buttonConfig = udpServerButtonConfig.buttonConfig;
 
 async function handleServerAction() {
@@ -27,31 +30,51 @@ async function handleServerAction() {
   }
 }
 
-type UsUEvent = { id: number, seq: number };
-const NewClient = ref(false);
-const usuEvent = ref<UsUEvent | null>(null);
+type UsuEvent = { id: number; seq: number };
+const newClient = ref(false);
+const usuEvent = ref<UsuEvent | null>(null);
 let seq = 0;
+
+const mapRefreshTrigger = ref(0);
+export type PacketEvent = { from: number; to: number; dir: number };
+const packetEvent = ref<PacketEvent | null>(null);
+provide("mapRefreshTrigger", mapRefreshTrigger);
+provide("packetEvent", packetEvent);
+
 const wsUrl = import.meta.env.DEV
   ? "ws://localhost:8080/ws"
   : (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws";
 
 const { status, lines, error, send, connect, close } = useStringWs(wsUrl, {
   onMessage: (data) => {
-    // Spezielle Behandlung für "uss" Nachricht (Update Server State)
     if (data === "uss") {
       serverStore.fetchState();
     } else if (data === "cnu") {
-      console.log("cnu");
-      NewClient.value = true;
-    } else if (data.startsWith("usu,")) {
-      console.log("usu", data);
+      newClient.value = true;
+    } else if (data.startsWith("usu")) {
+      const rest = data.slice(3);
+      if (rest) {
+        const clientId = parseInt(rest, 10);
+        if (!Number.isNaN(clientId)) {
+          usuEvent.value = { id: clientId, seq: seq++ };
+        }
+      }
+    } else if (data === "map") {
+      mapRefreshTrigger.value++;
+    } else if (data.startsWith("pkt,")) {
       const parts = data.split(",");
-      if (parts.length > 1 && parts[1]) {
-        const clientId = parseInt(parts[1], 10);
-        usuEvent.value = { id: clientId, seq: seq++ };
+      const p1 = parts[1];
+      const p2 = parts[2];
+      const p3 = parts[3];
+      if (p1 !== undefined && p2 !== undefined && p3 !== undefined) {
+        const from = parseInt(p1, 10);
+        const to = parseInt(p2, 10);
+        const dir = parseInt(p3, 10);
+        if (!Number.isNaN(from) && !Number.isNaN(to) && !Number.isNaN(dir)) {
+          packetEvent.value = { from, to, dir };
+        }
       }
     } else if (data === "rp") {
-      console.log("rp");
       send("ack/rp");
       location.reload();
     }
@@ -65,70 +88,106 @@ function handleSend(text: string) {
   if (!ok) lines.value.push("[ws] not connected");
 }
 
-// clients overlay
 const clientsOverlay = ref(false);
 </script>
 
 <template>
-  <div class="drawer">
-    <input id="drawer-sidebar" type="checkbox" class="drawer-toggle">
-    <div class="drawer-content">
-      <label for="drawer-sidebar" class="btn drawer-button">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-          stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-      </label>
-      <div class="p-6 space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="badge"
-            :class="status === 'open' ? 'badge-success' : status === 'connecting' ? 'badge-warning' : 'badge-ghost'">
+  <div class="min-h-screen flex flex-col bg-[var(--color-bg)]">
+    <header class="border-b border-[var(--color-border)] bg-[var(--color-bg-elevated)] flex-shrink-0">
+      <nav class="flex items-center gap-1 p-2">
+        <button
+          v-for="tab in [
+            { id: 'log' as Section, label: 'Log' },
+            { id: 'server' as Section, label: 'Server' },
+            { id: 'clients' as Section, label: 'Clients' },
+            { id: 'map' as Section, label: 'Map' },
+          ]"
+          :key="tab.id"
+          type="button"
+          class="technical-btn px-3 py-1.5 text-sm"
+          :class="activeSection === tab.id ? 'technical-btn-primary' : ''"
+          @click="activeSection = tab.id"
+        >
+          {{ tab.label }}
+        </button>
+        <div class="ml-auto flex items-center gap-2">
+          <span
+            class="technical-badge text-xs"
+            :class="
+              status === 'open'
+                ? 'technical-badge-success'
+                : status === 'connecting'
+                  ? 'technical-badge-warning'
+                  : 'technical-badge-error'
+            "
+          >
             {{ status }}
           </span>
-          <span v-if="error" class="text-error text-sm">{{ error }}</span>
-
-          <div class="ml-auto flex gap-2">
-            <button class="btn btn-primary" @click="api.udpClients.start()">
-              Start Client
-            </button>
-            <button :class="buttonConfig.class" :disabled="buttonConfig.disabled" @click="handleServerAction">
-              {{ buttonConfig.label }}
-            </button>
-            <button class="btn btn-sm" @click="connect">Connect</button>
-            <button class="btn btn-sm btn-outline" @click="close">Close</button>
-          </div>
+          <span v-if="error" class="text-sm text-[var(--color-error)]">{{ error }}</span>
+          <button type="button" class="technical-btn technical-btn-primary text-sm" @click="api.udpClients.start()">
+            Start Client
+          </button>
+          <button
+            type="button"
+            :class="[buttonConfig.class, 'technical-btn text-sm']"
+            :disabled="buttonConfig.disabled"
+            @click="handleServerAction"
+          >
+            {{ buttonConfig.label }}
+          </button>
+          <button type="button" class="technical-btn text-sm" @click="connect">Connect</button>
+          <button type="button" class="technical-btn text-sm" @click="close">Close</button>
         </div>
+      </nav>
+    </header>
 
+    <main class="flex-1 min-h-0 p-4 overflow-auto">
+      <div v-show="activeSection === 'log'" class="space-y-4">
         <WsLog :lines="lines" />
-
         <WsSendInput :disabled="!canSend" @send="handleSend" />
       </div>
-    </div>
-    <div class="drawer-side">
-      <label for="drawer-sidebar" class="drawer-overlay"></label>
-      <ul class="menu bg-base-200 min-h-full w-80 p-4">
-        <li><button onclick="server_modal.showModal()">Server</button></li>
-        <li><button @click="clientsOverlay = true">Clients</button></li>
-      </ul>
-    </div>
-    <!-- Server Modal -->
-    <dialog id="server_modal" class="modal">
-      <div class="modal-box">
+
+      <div v-show="activeSection === 'server'" class="technical-panel p-4 max-w-xl">
         <ServerState />
-        <div class="modal-action">
-          <form method="dialog">
-            <button :class="buttonConfig.class" :disabled="buttonConfig.disabled" @click="handleServerAction">
-              {{ buttonConfig.label }}
-            </button>
-            <button class="btn">Close</button>
-          </form>
+        <div class="mt-4 flex gap-2">
+          <button
+            type="button"
+            :class="[buttonConfig.class, 'technical-btn']"
+            :disabled="buttonConfig.disabled"
+            @click="handleServerAction"
+          >
+            {{ buttonConfig.label }}
+          </button>
         </div>
       </div>
-    </dialog>
-    <!-- Clients Overlay -->
-    <Overlay v-model="clientsOverlay" title="Clients" widthClass="w-11/12 w-[90vw]" maxWClass="max-w-none"
-      heightClass="h-11/12">
-      <ClientsState :needs-update="NewClient" :usu-event="usuEvent" @done:clients-update="NewClient = false" />
+
+      <div v-show="activeSection === 'clients'" class="flex gap-4 h-full">
+        <button
+          type="button"
+          class="technical-btn technical-btn-primary self-start"
+          @click="clientsOverlay = true"
+        >
+          Clients öffnen
+        </button>
+      </div>
+
+      <div v-show="activeSection === 'map'" class="h-full min-h-[400px]">
+        <ClientMap />
+      </div>
+    </main>
+
+    <Overlay
+      v-model="clientsOverlay"
+      title="UDP-Clients"
+      width-class="w-11/12 w-[90vw]"
+      max-w-class="max-w-none"
+      height-class="h-11/12"
+    >
+      <ClientsState
+        :needs-update="newClient"
+        :usu-event="usuEvent"
+        @done:clients-update="newClient = false"
+      />
     </Overlay>
   </div>
 </template>

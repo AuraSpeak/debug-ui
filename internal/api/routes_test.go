@@ -23,6 +23,7 @@ func TestRegisterRoutes(t *testing.T) {
 	mockGetAllUDPClients := func(w http.ResponseWriter, r *http.Request) {}
 	mockGetTraces := func(w http.ResponseWriter, r *http.Request) {}
 	mockGetAllUDPClientPaginated := func(w http.ResponseWriter, r *http.Request) {}
+	mockGetClientMap := func(w http.ResponseWriter, r *http.Request) {}
 
 	handler := RegisterRoutes(
 		mockWS,
@@ -37,6 +38,7 @@ func TestRegisterRoutes(t *testing.T) {
 		mockGetAllUDPClients,
 		mockGetTraces,
 		mockGetAllUDPClientPaginated,
+		mockGetClientMap,
 	)
 
 	require.NotNil(t, handler)
@@ -58,6 +60,7 @@ func TestRegisterRoutes_APIEndpoints(t *testing.T) {
 	mockGetAllUDPClients := func(w http.ResponseWriter, r *http.Request) { called["getAllUDPClients"] = true }
 	mockGetTraces := func(w http.ResponseWriter, r *http.Request) { called["getTraces"] = true }
 	mockGetAllUDPClientPaginated := func(w http.ResponseWriter, r *http.Request) { called["getAllUDPClientPaginated"] = true }
+	mockGetClientMap := func(w http.ResponseWriter, r *http.Request) { called["getClientMap"] = true }
 
 	handler := RegisterRoutes(
 		mockWS,
@@ -72,6 +75,7 @@ func TestRegisterRoutes_APIEndpoints(t *testing.T) {
 		mockGetAllUDPClients,
 		mockGetTraces,
 		mockGetAllUDPClientPaginated,
+		mockGetClientMap,
 	)
 
 	// Test API routes
@@ -91,6 +95,7 @@ func TestRegisterRoutes_APIEndpoints(t *testing.T) {
 		{"GET", "/api/client/get/all", "getAllUDPClients"},
 		{"GET", "/api/traces/all", "getTraces"},
 		{"GET", "/api/client/get/all/paginated", "getAllUDPClientPaginated"},
+		{"GET", "/api/client/map", "getClientMap"},
 	}
 
 	for _, tt := range tests {
@@ -114,6 +119,7 @@ func TestRegisterRoutes_CORS(t *testing.T) {
 	}
 
 	handler := RegisterRoutes(
+		mockHandler,
 		mockHandler,
 		mockHandler,
 		mockHandler,

@@ -1,0 +1,14 @@
+server:
+  port: "8080"
+  host: 0.0.0.0
+  env: dev
+  dtls:
+    certs:
+      mode: self_signed
+    security:
+      client_auth: no_client_cert
+      extended_master_secret: request
+    tuning:
+      mtu: 1200
+      replay_protection_window: 64
+      insecure_skip_verify_hello: true

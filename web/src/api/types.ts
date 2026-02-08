@@ -69,3 +69,13 @@ export interface LogEntry {
     time: string;
     [key: string]: any; // Für zukünftige dynamische Felder
 }
+
+export interface ClientMapConnection {
+    fromClientId: number;
+    toClientId: number; // 0 = server
+}
+
+export interface ClientMapData {
+    clients: Array<{ id: number; name: string }>;
+    connections: ClientMapConnection[];
+}

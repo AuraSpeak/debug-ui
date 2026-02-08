@@ -1,2 +1,15 @@
 @import "tailwindcss";
 @plugin "daisyui";
+@import "./theme.css";
+
+/* Technical base: reduce DaisyUI playfulness, keep utility */
+[data-theme] {
+  --rounded-box: 6px;
+  --rounded-btn: 6px;
+  --rounded-badge: 4px;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}

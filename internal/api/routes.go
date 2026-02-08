@@ -21,6 +21,7 @@ func RegisterRoutes(
 	getAllUDPClients http.HandlerFunc,
 	getTraces http.HandlerFunc,
 	getAllUDPClientPaginated http.HandlerFunc,
+	getClientMap http.HandlerFunc,
 ) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", handleWS)
@@ -37,6 +38,7 @@ func RegisterRoutes(
 	mux.HandleFunc("GET /api/client/get/name", getUDPClientStateByName)
 	mux.HandleFunc("GET /api/client/get/id", getUDPClientStateById)
 	mux.HandleFunc("GET /api/client/get/all", getAllUDPClients)
+	mux.HandleFunc("GET /api/client/map", getClientMap)
 
 	// Trace handlers
 	mux.HandleFunc("GET /api/traces/all", getTraces)

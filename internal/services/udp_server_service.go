@@ -48,8 +48,13 @@ func (s *UDPServerService) HandleAll(clientAddr string, packet []byte) error {
 	s.mu.Lock()
 	if s.server != nil {
 		s.server.Broadcast(&protocol.Packet{
-			PacketHeader: protocol.Header{PacketType: protocol.PacketTypeDebugAny},
-			Payload:      packet,
+			PacketHeader: protocol.Header{
+				Magic:      protocol.Magic,
+				Version:    protocol.Version,
+				PacketType: protocol.PacketTypeDebugAny,
+				Length:     uint32(len(packet)),
+			},
+			Payload: packet,
 		})
 	}
 	s.mu.Unlock()

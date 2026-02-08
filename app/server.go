@@ -98,6 +98,7 @@ func (s *Server) Run() error {
 			s.GetAllUDPClients,
 			s.GetTraces,
 			s.GetAllUDPClientPaginated,
+			s.GetClientMap,
 		),
 	}
 
@@ -142,6 +143,7 @@ func (s *Server) handleClientCommands(clientID int, cmdCh chan command.InternalC
 							// Broadcast to all WebSocket Clients that the UDP Client State has changed
 							if s.wsHub != nil {
 								s.wsHub.Broadcast([]byte("usu" + strconv.Itoa(clientID)))
+								s.wsHub.Broadcast([]byte("map"))
 							}
 							break
 						}
@@ -187,6 +189,7 @@ func (s *Server) handleInternal() {
 					// Broadcast to all WebSocket Clients that the UDP Server State has changed
 					if s.wsHub != nil {
 						s.wsHub.Broadcast([]byte("uss"))
+						s.wsHub.Broadcast([]byte("map"))
 					}
 				}
 			case <-s.ctx.Done():
@@ -335,6 +338,9 @@ func (s *Server) handleAllClient(name string, packet []byte) error {
 	s.udpClients[name] = udpClient
 	if s.wsHub != nil {
 		s.wsHub.Broadcast([]byte("usu" + strconv.Itoa(udpClient.ID)))
+		s.wsHub.Broadcast([]byte("map"))
+		// pkt,fromId,toId,dir: server->client = from=0, to=clientId, dir=2
+		s.wsHub.Broadcast([]byte("pkt,0," + strconv.Itoa(udpClient.ID) + ",2"))
 	}
 
 	return nil
@@ -358,7 +364,10 @@ func (s *Server) StartUDPClient(w http.ResponseWriter, r *http.Request) {
 		Id:   udpClient.ID,
 	}
 
-	s.wsHub.Broadcast([]byte("cnu"))
+	if s.wsHub != nil {
+		s.wsHub.Broadcast([]byte("cnu"))
+		s.wsHub.Broadcast([]byte("map"))
+	}
 	udpClientResponse.Send(w)
 }
 
@@ -386,6 +395,9 @@ func (s *Server) StopUDPClient(w http.ResponseWriter, r *http.Request) {
 	udpClient.Client.Stop()
 	// Remove client command channel from map
 	delete(s.clientCommandChs, udpClient.ID)
+	if s.wsHub != nil {
+		s.wsHub.Broadcast([]byte("map"))
+	}
 	apiSuccess := api.ApiSuccess{
 		Message: "UDP client stopped",
 	}
@@ -570,6 +582,20 @@ func (s *Server) GetAllUDPClientPaginated(w http.ResponseWriter, r *http.Request
 	paginatedResponse.Send(w)
 }
 
+func (s *Server) GetClientMap(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	clients := make([]api.UDPClientListItem, 0, len(s.udpClients))
+	connections := make([]api.ClientMapConnection, 0)
+	for name, uc := range s.udpClients {
+		clients = append(clients, api.UDPClientListItem{Id: uc.ID, Name: name})
+		// Star topology: each client is connected to server (0)
+		connections = append(connections, api.ClientMapConnection{FromClientID: uc.ID, ToClientID: 0})
+	}
+	resp := api.ClientMapResponse{Clients: clients, Connections: connections}
+	resp.Send(w)
+}
+
 func (s *Server) SendDatagram(w http.ResponseWriter, r *http.Request) {
 	// Parse request body
 	var req api.SendDatagramRequest
@@ -640,8 +666,13 @@ func (s *Server) SendDatagram(w http.ResponseWriter, r *http.Request) {
 	}
 
 	packet := &protocol.Packet{
-		PacketHeader: protocol.Header{PacketType: protocol.PacketTypeDebugAny},
-		Payload:      messageBytes,
+		PacketHeader: protocol.Header{
+			Magic:      protocol.Magic,
+			Version:    protocol.Version,
+			PacketType: protocol.PacketTypeDebugAny,
+			Length:     uint32(len(messageBytes)),
+		},
+		Payload: messageBytes,
 	}
 
 	// Send message via client (außerhalb des Locks, damit es nicht blockiert)
@@ -681,6 +712,9 @@ func (s *Server) SendDatagram(w http.ResponseWriter, r *http.Request) {
 	// Broadcast WebSocket update
 	if s.wsHub != nil {
 		s.wsHub.Broadcast([]byte("usu" + strconv.Itoa(req.Id)))
+		s.wsHub.Broadcast([]byte("map"))
+		// pkt,fromId,toId,dir: client->server = from=clientId, to=0, dir=1
+		s.wsHub.Broadcast([]byte("pkt," + strconv.Itoa(req.Id) + ",0,1"))
 	}
 
 	// Send success response

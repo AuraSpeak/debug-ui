@@ -26,8 +26,5 @@ require (
 	golang.org/x/sys v0.40.0 // indirect
 )
 
-replace github.com/auraspeak/server => ../server
 
-replace github.com/auraspeak/client => ../client
 
-replace github.com/auraspeak/protocol => ../protocol
