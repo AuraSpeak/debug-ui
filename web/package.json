@@ -16,7 +16,7 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
-    "mermaid": "^11.12.2",
+    "mermaid": "^11.15.0",
     "pinia": "^3.0.4",
     "vue": "^3.5.26"
   },
